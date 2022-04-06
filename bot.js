@@ -1,4 +1,4 @@
-const { Telegraf, Markup } = require('telegraf')
+const { Telegraf, Markup, Scenes, Stage, session } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 const token = '5264404869:AAHqC-YbRstUMAQo62OVwjNHmmoQdxL9xZU';
 
@@ -7,68 +7,70 @@ const publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 const supabase = createClient(apiSupabase, publicAnonKey);
 
-
 const bot = new Telegraf(token);
 
 bot.start((ctx) => ctx.reply('Welcome!'));
 
-let isAuthNickName = false;
-let isPasswordEnter = false;
+const loginWizard = new Scenes.WizardScene(
+    'login',
+    async (ctx) => {
+        await ctx.replyWithHTML(`Nickname:`);
+        return ctx.wizard.next()
+	},
+    async (ctx) => {
+        let nickname = ctx.message.text
+        let user = await supabase.from('users').select('nickname').eq('nickname', nickname);
+        
+        if(user.data.length != 0){
+            ctx.session.nickname = nickname;
+            
+            await ctx.replyWithHTML(`Password:`);
+            return ctx.wizard.next()
+        } else{
+            await ctx.reply('Такого пользователя нет в базе данных!');
+            return ctx.wizard.back()
+        }
+	},
+    async (ctx) => {
+        let {nickname} = ctx.session;
+        
+        let user = await supabase.from('users').select('nickname, password').eq('nickname', nickname);
+        if(ctx.message.text == user.data[0].password){
+            await ctx.reply(user);
+            await ctx.reply('Успешно авторизированы!');
+        }
+        else{
+            await ctx.reply('Не верный пароль!');
+        }
+        
+        return ctx.scene.leave()
+	}
+);
 
-bot.command('register', async (ctx) => {
-    if(isAuthNickName == false && isPasswordEnter == false){
-         await ctx.reply('Please enter yor nickname:');
-         isAuthNickName = true;
+const registerWizard = new Scenes.WizardScene(
+    'register',
+    async (ctx) =>{
+        await ctx.replyWithHTML(`<b>Registration!</b>`);
+        await ctx.replyWithHTML(`Please enter you nickname:`);
     }
-   
-});
+);
+
+
+
+const stage = new Scenes.Stage([loginWizard, registerWizard]);
+bot.use(session()); // to  be precise, session is not a must have for Scenes to work, but it sure is lonely without one
+bot.use(stage.middleware());
 
 bot.command('login', async (ctx) => {
-    if(isAuthNickName == false && isPasswordEnter == false){
-         await ctx.reply('Please enter yor nickname:');
-         isAuthNickName = true;
-    }
-   
+    await ctx.scene.enter('login');
 });
 
-bot.command("test", async (ctx, next) =>{
-    await ctx.reply('OK! - ' + ctx.message.text);
-     await next();
-     await ctx.reply('OK! - ' + ctx.message.user_id);
-    
-})
-
-
-let nickname = "";
-let password = "";
-bot.on('text', async (ctx) =>{
-   if(isAuthNickName == true){
-       await ctx.reply('OK!');
-       isAuthNickName = false;
-       nickname = ctx.message.text;
-       await ctx.reply('Please enter password:');
-       isPasswordEnter = true;
-       console.log(isPasswordEnter);
-       return;
-   }
-   if(isPasswordEnter == true){
-       await ctx.reply('OK!');
-       password = ctx.message.text;
-       isPasswordEnter = false;
-       await supabase.from('users').insert(
-        [
-            { 
-                id: 1, nickname: nickname, password: password
-            },
-        ])
-       return;
-   } 
+bot.command('register', async (ctx) =>{
+   await ctx.scene.enter('register'); 
 });
 
-    
-bot.action('btn_1', async(ctx) => { 
-    await ctx.reply("Good evry one!");
-});
 
-bot.command('hipster', Telegraf.reply('λ'))
+
+ 
+
 bot.launch();
