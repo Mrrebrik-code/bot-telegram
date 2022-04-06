@@ -9,7 +9,7 @@ const supabase = createClient(apiSupabase, publicAnonKey);
 
 const bot = new Telegraf(token);
 
-bot.start((ctx) => ctx.reply('Welcome!'));
+
 
 const loginWizard = new Scenes.WizardScene(
     'login',
@@ -55,9 +55,73 @@ const registerWizard = new Scenes.WizardScene(
     }
 );
 
+const createformUser = new Scenes.WizardScene(
+    'create-formUser',
+    async (ctx) =>{
+        let user = await supabase.from('users').select('userId, name').eq('userId', ctx.message.chat.id);
+        if(user.data.length != 0){
+            await ctx.reply('Добпый день, ' + user.data[0].name + "! Мы рады вас видеть снова!");
+            return ctx.scene.leave()
+        }
+        
+        await ctx.reply('Как вас зовут?');
+        return ctx.wizard.next();
+    },
+    async (ctx) =>{
+        ctx.session.name = ctx.message.text;
+        
+        await ctx.reply('Сколько вам лет?');
+        return ctx.wizard.next();
+    },
+    async (ctx) =>{
+        ctx.session.year = ctx.message.text;
+        let {name} = ctx.session
+        let {year} = ctx.session
+        const isSave = await saveDatabaseUser(ctx.message.chat.id, name, year);
+    
+        if(isSave){
+            await ctx.reply('Хорошо! Мы вас сохранили в базу данных!');
+            return ctx.scene.leave()
+        }
+        else{
+            await ctx.reply('Произошел сбой!');
+            return ctx.scene.leave()
+        }
+        
+        
+    }
+);
 
 
-const stage = new Scenes.Stage([loginWizard, registerWizard]);
+async function saveDatabaseUser(userId, name, year){
+    let user = await  supabase
+            .from('users')
+            .insert(
+            [ 
+                { 
+                    userId: userId, 
+                    name: name, 
+                    year: year
+                }
+            ]);
+    if(user.data.length != 0){
+        return true;
+    }
+    else{
+        return false;
+    }
+    
+}
+
+const sendMessageScene = new Scenes.WizardScene(
+    'send-message',
+     async (ctx) =>{
+        await ctx.reply('Введите сообщение!');
+        await bot.telegram.sendMessage('1246913274', ctx.message.text); 
+     }
+);
+
+const stage = new Scenes.Stage([loginWizard, registerWizard, createformUser, sendMessageScene]);
 bot.use(session()); // to  be precise, session is not a must have for Scenes to work, but it sure is lonely without one
 bot.use(stage.middleware());
 
@@ -69,7 +133,17 @@ bot.command('register', async (ctx) =>{
    await ctx.scene.enter('register'); 
 });
 
+bot.command('id', async (ctx) =>{
+   await  ctx.reply("Your user ID: " + ctx.message.chat.id);
+});
 
+bot.start(async (ctx) => {
+    await ctx.scene.enter('create-formUser'); 
+});
+
+bot.command('send', async (ctx) =>{
+   await ctx.scene.enter('send-message'); 
+});
 
  
 
