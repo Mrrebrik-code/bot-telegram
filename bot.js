@@ -118,12 +118,13 @@ const sendMessageScene = new Scenes.WizardScene(
      async (ctx) =>{
         await ctx.reply('Введите сообщение!');
         await bot.telegram.sendMessage('1246913274', ctx.message.text);
+        
         return ctx.scene.leave()
      }
 );
 const test = Markup
     .keyboard([
-      ['ДА', 'НЕТ'],
+      ['\ud83d\udc4d', '\ud83d\udc4e', 'Закончить'],
     ]);
     
 
@@ -135,23 +136,27 @@ const searchUsers = new Scenes.WizardScene(
         return ctx.wizard.next();
     },
     async (ctx) =>{
-        //if(ctx.message.text == "ДА"){
-            return ctx.wizard.next();
-
-    },
-    async (ctx) =>{
-
-        
+        if(ctx.message.text == "Закончить"){
+            await ctx.reply('Подождем пока кто-то увидит твою анкету');
+            await ctx.reply('Меню', Markup
+    .keyboard([
+      ['ИСКАТЬ ЛЮДЕЙ', 'МОЙ АЙДИ'],
+    ])
+    .oneTime()
+    .resize()
+  )
+            return ctx.scene.leave();
+        }
+        await ctx.reply("Нашли кое-кого для тебя ;)", test.oneTime().resize());
         let user = await supabase.from('users').select('userId, name, year').eq('id', ctx.session.indexUser);
-        
-        ctx.reply(ctx.session.indexUser);
          return ctx.replyWithPhoto({ url: 'https://picsum.photos/200/300/?random' },
     {
       caption: `${user.data[0].name}  -  ${user.data[0].year} лет.`,
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        Markup.button.callback('Plain', 'plain'),
-        Markup.button.callback('Italic', 'italic')
+        Markup.button.callback('\ud83d\udc4d', 'plain'),
+        Markup.button.callback('\ud83d\udc4e', 'italic'),
+        Markup.button.callback('\u2709\ufe0f', 'italic')
       ])
     }
   )
@@ -164,15 +169,7 @@ bot.command('caption', (ctx) => {
 })
 
 
-bot.command('start', async (ctx) => {
-  return await ctx.reply('Меню', Markup
-    .keyboard([
-      ['ИСКАТЬ ЛЮДЕЙ', 'МОЙ АЙДИ'],
-    ])
-    .oneTime()
-    .resize()
-  )
-})
+
 
 const stage = new Scenes.Stage([loginWizard, registerWizard, createformUser, sendMessageScene, searchUsers]);
 bot.use(session()); // to  be precise, session is not a must have for Scenes to work, but it sure is lonely without one
@@ -182,16 +179,24 @@ bot.command('login', async (ctx) => {
     await ctx.scene.enter('login');
 });
 
+bot.command('start', async (ctx) => {
+    await ctx.reply('Вас приветствует бот знакомств для разрбатчиков! \ud83e\uddd1\u200d\ud83d\udcbb', Markup
+    .keyboard([
+      ['ИСКАТЬ ЛЮДЕЙ', 'МОЙ АЙДИ'],
+    ])
+    .oneTime()
+    .resize()
+  )
+    await ctx.scene.enter('create-formUser'); 
+  
+})
+
 bot.command('register', async (ctx) =>{
    await ctx.scene.enter('register'); 
 });
 
 bot.hears('МОЙ АЙДИ', async (ctx) =>{
    await  ctx.reply("Your user ID: " + ctx.message.chat.id);
-});
-
-bot.command('start', async (ctx) => {
-    await ctx.scene.enter('create-formUser'); 
 });
 
 bot.hears('ИСКАТЬ ЛЮДЕЙ', async (ctx) =>{
